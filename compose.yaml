@@ -12,12 +12,12 @@ services:
       - database
 
   client:
-    build: client
+    build: client_r
     restart: unless-stopped
-    #volumes:
-    #  - ./client:/app
+    volumes:
+      - ./client:/app
     ports:
-      - 5173:5173
+      - 3000:3000
     depends_on:
       - server
   
