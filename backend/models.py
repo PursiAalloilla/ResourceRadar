@@ -6,11 +6,11 @@ from extensions import db
 
 
 class UserType(Enum):
+    CIVILIAN = 'CIVILIAN'
     NGO = 'NGO'
-    CORPORATE = 'corporate'
-    CIVILIAN = 'civilian'
-    CORPORATE_ENTITY = 'corporate entity'
-
+    GOVERNMENT_AGENCY = 'GOVERNMENT_AGENCY'
+    CORPORATE_ENTITY = 'CORPORATE_ENTITY'
+    LOCAL_AUTHORITY = 'LOCAL_AUTHORITY'
 
 class Resource(db.Model):
     __tablename__ = 'resources'
@@ -47,6 +47,11 @@ class Resource(db.Model):
         self.flagged = True
         self.abuse_reason = reason
 
+class VerifiedEmail(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    email = db.Column(db.String(255), unique=True, nullable=False)
+    user_type = db.Column(db.String(64), nullable=False)
+    created_at = db.Column(db.DateTime, server_default=db.func.now())
 
 class AppSetting(db.Model):
     __tablename__ = 'app_settings'
