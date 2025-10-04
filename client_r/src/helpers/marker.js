@@ -33,7 +33,6 @@ export function markerHelper(category, subcategory) {
         el.style.backgroundSize = 'cover';
         el.style.backgroundPosition = 'center';
         el.style.backgroundRepeat = 'no-repeat';
-        console.log('Icon path:', iconPath);
         return el;
     }
     

@@ -1,0 +1,78 @@
+# Azure Container Instances deployment
+apiVersion: '2019-12-01'
+location: eastus
+name: emergency-support-app
+properties:
+  containers:
+  - name: backend
+    properties:
+      image: your-registry.azurecr.io/backend:latest
+      resources:
+        requests:
+          cpu: 1
+          memoryInGb: 1
+      ports:
+      - port: 5000
+        protocol: TCP
+      environmentVariables:
+      - name: DATABASE_URI
+        value: "sqlite:///emergency_support.db"
+      - name: OPENAI_MODEL
+        value: "gpt-4o-mini"
+  
+  - name: client-r
+    properties:
+      image: your-registry.azurecr.io/client-r:latest
+      resources:
+        requests:
+          cpu: 0.5
+          memoryInGb: 0.5
+      ports:
+      - port: 3000
+        protocol: TCP
+      environmentVariables:
+      - name: REACT_APP_MAPBOX_TOKEN
+        value: "pk.eyJ1IjoidnA0NTEiLCJhIjoiY21nYjltdXB5MHdkYjJqczdkdzdoMzJsbiJ9.7nq6toK2LmmlYx2wZupdVg"
+  
+  - name: consumer-app
+    properties:
+      image: your-registry.azurecr.io/consumer-app:latest
+      resources:
+        requests:
+          cpu: 0.5
+          memoryInGb: 0.5
+      ports:
+      - port: 4173
+        protocol: TCP
+      environmentVariables:
+      - name: VITE_API_URL
+        value: "http://backend:5000"
+  
+  - name: legal-entity-consumer-app
+    properties:
+      image: your-registry.azurecr.io/legal-entity-consumer-app:latest
+      resources:
+        requests:
+          cpu: 0.5
+          memoryInGb: 0.5
+      ports:
+      - port: 4173
+        protocol: TCP
+      environmentVariables:
+      - name: VITE_API_URL
+        value: "http://backend:5000"
+  
+  osType: Linux
+  ipAddress:
+    type: Public
+    ports:
+    - protocol: TCP
+      port: 5000
+    - protocol: TCP
+      port: 3000
+    - protocol: TCP
+      port: 3001
+    - protocol: TCP
+      port: 3002
+tags: {}
+type: Microsoft.ContainerInstance/containerGroups
