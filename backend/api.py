@@ -4,13 +4,11 @@
 import os
 import tempfile
 from datetime import datetime
-from typing import Any, Dict
 
 from flask import Blueprint, request, jsonify, json
 
 from app import db
-from models import Resource, AppSetting, UserType, VerifiedEmail
-from services.geocode import geocode_to_geojson
+from models import Resource, UserType, VerifiedEmail, Category, Subcategory
 from services.transcribe import transcribe_audio
 from services.legal_entity_verification import verify_legal_entity
 
@@ -20,32 +18,11 @@ api_bp = Blueprint('api', __name__)
 @api_bp.post('/process_message/')
 def process_message():
     from services.llm import extract_resource_fields
-    """
-    Accepts JSON or multipart/form-data.
 
-    JSON body shape:
-    {
-      "text": "..." | null,
-      "audio": null,                    # ignored unless multipart
-      "metadata": {
-         "phone_number": "+358...",
-         "incident_location": {GeoJSON},  # REQUIRED, incident location
-         "user_location": {GeoJSON or None},  # OPTIONAL, user location
-         "first_name": "...", "last_name": "...",
-         "social_security_number": "...",
-         "user_type": "NGO|corporate|civilian|corporate entity|ai model"
-      }
-    }
-
-    Multipart shape (for audio): fields: metadata (json), file (audio/*)
-    """
     payload = {}
 
-    # --- Parse request content ---
     if request.content_type and request.content_type.startswith('multipart/form-data'):
-        # audio upload path
         meta_json = request.form.get('metadata', '{}')
-        import json
         try:
             metadata = json.loads(meta_json or '{}')
         except Exception:
@@ -56,7 +33,6 @@ def process_message():
         with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(file.filename)[-1] or '.wav') as tmp:
             file.save(tmp.name)
             audio_path = tmp.name
-        # Local speech recognition
         text, _ = transcribe_audio(audio_path)
         os.unlink(audio_path)
         payload['text'] = text
@@ -70,34 +46,28 @@ def process_message():
     if not text:
         return jsonify({"error": "No text to process (provide text or audio)."}), 400
 
-    # --- Extract metadata inputs ---
-    incident_location = metadata.get("incident_location")  # GeoJSON (required)
+    incident_location = metadata.get("incident_location")
     if not incident_location:
         return jsonify({"error": "Missing required 'incident_location' field in metadata."}), 400
 
-    user_location = metadata.get("user_location")  # GeoJSON (optional)
+    user_location = metadata.get("user_location")
     user_type_val = metadata.get("user_type")
 
-    # --- Extract resources using LLM ---
     extracted_list = extract_resource_fields(
         text=text,
         incident_location=incident_location,
         user_type=user_type_val,
-        user_location=user_location  # Pass optional user location to LLM
+        user_location=user_location,
     )
     if not extracted_list:
-        return jsonify({"error": "Could not extract any resources from the message."}), 400
+        return jsonify({"error": "Could not extract any valid resources from the message."}), 400
 
-    # --- Resolve fallback location for resource saving ---
     location_geojson = incident_location
-
     resources_created = []
 
     for extracted in extracted_list:
-        phone = metadata.get('phone_number')
-        first_name = extracted.get('first_name') or metadata.get('first_name')
-        last_name = extracted.get('last_name') or metadata.get('last_name')
-        ssn = extracted.get('social_security_number') or metadata.get('social_security_number')
+        if not extracted.get("location_geojson"):
+            continue
 
         user_type = None
         if user_type_val:
@@ -113,22 +83,23 @@ def process_message():
 
         resource = Resource(
             category=extracted.get('category'),
+            subcategory=extracted.get('subcategory'),
             name=extracted.get('name') or 'unknown',
             quantity=quantity,
+            num_available_people=extracted.get('num_available_people'),
             location_geojson=extracted.get("location_geojson") or location_geojson,
-            phone_number=phone,
-            first_name=first_name,
-            last_name=last_name,
-            social_security_number=ssn,
+            location_text=extracted.get("location_text"),
+            distance_km=extracted.get("distance_km"),
+            phone_number=extracted.get("phone_number") or metadata.get("phone_number"),
+            email=extracted.get("email") or metadata.get("email"),
+            first_name=extracted.get("first_name") or metadata.get("first_name"),
+            last_name=extracted.get("last_name") or metadata.get("last_name"),
             source_text=text,
             user_type=user_type,
             created_at=datetime.utcnow(),
             flagged=extracted.get('flagged', False),
             abuse_reason=extracted.get('abuse_reason'),
         )
-
-        if extracted.get("distance_km") is not None:
-            resource.distance_km = extracted["distance_km"]
 
         db.session.add(resource)
         resources_created.append(resource)
@@ -140,19 +111,23 @@ def process_message():
         "resources": [
             {
                 "id": r.id,
-                "category": r.category,
+                "category": r.category.value if r.category else None,
+                "subcategory": r.subcategory.value if r.subcategory else None,
                 "name": r.name,
                 "quantity": r.quantity,
-                "location": r.location_geojson,
-                "distance_km": getattr(r, "distance_km", None),
-                "flagged": r.flagged,
-                "abuse_reason": r.abuse_reason,
+                "num_available_people": r.num_available_people,
+                "location_geojson": r.location_geojson,
+                "location_text": r.location_text,
+                "distance_km": r.distance_km,
                 "phone_number": r.phone_number,
-                "created_at": r.created_at.isoformat() + 'Z',
+                "email": r.email,
                 "first_name": r.first_name,
                 "last_name": r.last_name,
-                "social_security_number": r.social_security_number,
-                "user_type": r.user_type.value if r.user_type else None
+                "source_text": r.source_text,
+                "user_type": r.user_type.value if r.user_type else None,
+                "created_at": r.created_at.isoformat() + 'Z',
+                "flagged": r.flagged,
+                "abuse_reason": r.abuse_reason,
             }
             for r in resources_created
         ]
@@ -179,24 +154,34 @@ def list_resources():
             "resources": matched
         })
 
-
     # --- Otherwise: list all resources normally ---
     resources = Resource.query.all()
     return jsonify({
         "resources": [
             {
                 "id": r.id,
-                "category": r.category,
+                "category": r.category.value if r.category else None,
+                "subcategory": r.subcategory.value if getattr(r, "subcategory", None) else None,
                 "name": r.name,
                 "quantity": r.quantity,
-                "location": r.location_geojson,
+                "num_available_people": r.num_available_people,
+                "location_geojson": r.location_geojson,
+                "location_text": r.location_text,
+                "distance_km": r.distance_km,
                 "phone_number": r.phone_number,
+                "email": r.email,
                 "first_name": r.first_name,
                 "last_name": r.last_name,
-                "user_type": r.user_type.value if r.user_type else None
-            } for r in resources
+                "source_text": r.source_text,
+                "user_type": r.user_type.value if r.user_type else None,
+                "created_at": r.created_at.isoformat() + 'Z',
+                "flagged": r.flagged,
+                "abuse_reason": r.abuse_reason,
+            }
+            for r in resources
         ]
     })
+
 
 
 @api_bp.post("/resources/create/")
@@ -206,18 +191,20 @@ def create_resource():
 
     Example JSON body:
     {
-        "category": "medical",
+        "category": "MEDICAL_SUPPLIES",
+        "subcategory": "FIRST_AID",
         "name": "first aid kit",
         "quantity": 12,
+        "num_available_people": 3,
         "location_text": "Tampere central hospital",
         "location_geojson": {
             "type": "Point",
             "coordinates": [23.7610, 61.4981]
         },
         "phone_number": "+358401234567",
+        "email": "liisa.virtanen@example.com",
         "first_name": "Liisa",
         "last_name": "Virtanen",
-        "social_security_number": "123456-789A",
         "user_type": "GOVERNMENT_AGENCY",
         "source_text": "manual entry"
     }
@@ -228,16 +215,35 @@ def create_resource():
     if not data.get("name"):
         return jsonify({"ok": False, "error": "Field 'name' is required."}), 400
 
-    # Handle optional fields safely
+    # Parse category and subcategory enums
+    category = None
+    subcategory = None
+    if data.get("category"):
+        try:
+            category = Category[data["category"].upper()]
+        except KeyError:
+            return jsonify({"ok": False, "error": f"Invalid category '{data['category']}'."}), 400
+
+    if data.get("subcategory"):
+        try:
+            subcategory = Subcategory[data["subcategory"].upper()]
+        except KeyError:
+            return jsonify({"ok": False, "error": f"Invalid subcategory '{data['subcategory']}'."}), 400
+
+    # Quantity and num_available_people
     try:
         quantity = int(data["quantity"]) if data.get("quantity") is not None else None
     except ValueError:
         return jsonify({"ok": False, "error": "Invalid 'quantity' (must be integer)."}), 400
 
+    try:
+        num_available_people = int(data["num_available_people"]) if data.get("num_available_people") is not None else None
+    except ValueError:
+        return jsonify({"ok": False, "error": "Invalid 'num_available_people' (must be integer)."}), 400
+
     # Parse user_type enum if provided
     user_type = None
     if data.get("user_type"):
-        from models import UserType
         try:
             user_type = UserType[data["user_type"].upper()]
         except KeyError:
@@ -245,16 +251,18 @@ def create_resource():
 
     # Build resource instance
     resource = Resource(
-        category=data.get("category"),
+        category=category,
+        subcategory=subcategory,
         name=data.get("name"),
         quantity=quantity,
+        num_available_people=num_available_people,
         location_geojson=data.get("location_geojson"),
         location_text=data.get("location_text"),
         distance_km=data.get("distance_km"),
         phone_number=data.get("phone_number"),
+        email=data.get("email"),
         first_name=data.get("first_name"),
         last_name=data.get("last_name"),
-        social_security_number=data.get("social_security_number"),
         source_text=data.get("source_text") or "manual entry",
         user_type=user_type,
         flagged=False,
@@ -269,15 +277,23 @@ def create_resource():
         "message": "Resource created successfully.",
         "resource": {
             "id": resource.id,
-            "category": resource.category,
+            "category": resource.category.value if resource.category else None,
+            "subcategory": resource.subcategory.value if resource.subcategory else None,
             "name": resource.name,
             "quantity": resource.quantity,
-            "location": resource.location_geojson,
+            "num_available_people": resource.num_available_people,
+            "location_geojson": resource.location_geojson,
+            "location_text": resource.location_text,
+            "distance_km": resource.distance_km,
             "phone_number": resource.phone_number,
+            "email": resource.email,
             "first_name": resource.first_name,
             "last_name": resource.last_name,
+            "source_text": resource.source_text,
             "user_type": resource.user_type.value if resource.user_type else None,
-            "created_at": resource.created_at.isoformat() + "Z"
+            "created_at": resource.created_at.isoformat() + "Z",
+            "flagged": resource.flagged,
+            "abuse_reason": resource.abuse_reason,
         }
     }), 201
 

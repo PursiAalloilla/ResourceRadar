@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import logo from './assets/logo.png'
 import './App.css'
 
 type UserType = 'NGO' | 'GOVERNMENT_AGENCY' | 'CORPORATE_ENTITY' | 'LOCAL_AUTHORITY'
@@ -26,6 +27,65 @@ const userTypeLabels: Record<UserType, string> = {
   LOCAL_AUTHORITY: 'Local Authority'
 }
 
+// Subcategory definitions based on backend models
+const subcategories = {
+  SKILLS: {
+    MEDICAL: 'Medical',
+    CONSTRUCTION: 'Construction',
+    IT: 'IT',
+    LANGUAGE: 'Language',
+    MECHANIC: 'Mechanic',
+    OTHER: 'Other'
+  },
+  FUEL: {
+    DIESEL: 'Diesel',
+    GASOLINE: 'Gasoline',
+    PROPANE: 'Propane',
+    BATTERIES: 'Batteries'
+  },
+  FOOD: {
+    NON_PERISHABLE: 'Non-Perishable',
+    PERISHABLE: 'Perishable',
+    BABY_FOOD: 'Baby Food',
+    PET_FOOD: 'Pet Food'
+  },
+  WATER: {
+    BOTTLED: 'Bottled',
+    FILTERS: 'Filters',
+    PURIFICATION_TABLETS: 'Purification Tablets'
+  },
+  MEDICAL_SUPPLIES: {
+    FIRST_AID: 'First Aid',
+    MEDICATION: 'Medication',
+    EQUIPMENT: 'Equipment'
+  },
+  SHELTER: {
+    TENTS: 'Tents',
+    BLANKETS: 'Blankets'
+  },
+  TRANSPORT: {
+    VEHICLES: 'Vehicles',
+    BOATS: 'Boats',
+    FUEL_TRUCKS: 'Fuel Trucks'
+  },
+  EQUIPMENT: {
+    GENERATORS: 'Generators',
+    TOOLS: 'Tools',
+    PROTECTIVE_GEAR: 'Protective Gear'
+  },
+  COMMUNICATION: {
+    RADIOS: 'Radios',
+    SATPHONES: 'Satellite Phones',
+    POWER_BANKS: 'Power Banks'
+  },
+  OTHER: {
+    UNKNOWN: 'Unknown'
+  }
+}
+
+// Helper function to check if category is skills
+const isSkillsCategory = (category: string) => category === 'SKILLS'
+
 function App() {
   const [appState, setAppState] = useState<AppState>('splash')
   const [email, setEmail] = useState('')
@@ -37,6 +97,7 @@ function App() {
   // Resource form state
   const [resourceData, setResourceData] = useState({
     category: '',
+    subcategory: '',
     name: '',
     quantity: '',
     phone_number: '',
@@ -164,6 +225,7 @@ function App() {
         },
         body: JSON.stringify({
           category: resourceData.category || undefined,
+          subcategory: resourceData.subcategory || undefined,
           name: resourceData.name,
           quantity: resourceData.quantity ? parseInt(resourceData.quantity) : undefined,
           phone_number: resourceData.phone_number || undefined,
@@ -182,6 +244,7 @@ function App() {
         // Reset form data for next resource creation
         setResourceData({
           category: '',
+          subcategory: '',
           name: '',
           quantity: '',
           phone_number: '',
@@ -268,10 +331,25 @@ function App() {
     return (
       <div className="splash-screen">
         <div className="logo-placeholder">
-          <div style={{ fontSize: '3em', color: '#00ff41' }}>🏢</div>
+          <div style={{ 
+            width: '120px', 
+            height: '120px', 
+            borderRadius: '50%', 
+            backgroundColor: '#ffffff', 
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'center',
+            marginBottom: '1rem',
+            boxShadow: '0 4px 8px rgba(0, 0, 0, 0.2)'
+          }}>
+            <div style={{ fontSize: '3em' }}>🏢</div>
+          </div>
         </div>
-        <div className="powered-by">Powered by</div>
-        <h1>Legal Entity Verification</h1>
+        <div className="powered-by">
+          <span>Powered by </span>
+        </div>
+        <img src={logo} alt="Platform Logo" style={{ width: '500px', height: 'auto' }} />
+        <h1>Emergency Resource Portal</h1>
       </div>
     )
   }
@@ -279,7 +357,7 @@ function App() {
   if (appState === 'form') {
     return (
       <div className="container">
-        <h1>Legal Entity Verification</h1>
+        <h1>Emergency Resource Portal</h1>
         <div className="form-container">
           <div className="form-group">
             <label htmlFor="email">Email Address</label>
@@ -368,13 +446,15 @@ function App() {
           </p>
           
           <div className="form-group">
-            <label htmlFor="resourceName">Resource Name *</label>
+            <label htmlFor="resourceName">
+              {isSkillsCategory(resourceData.category) ? 'Profession *' : 'Resource Name *'}
+            </label>
             <input
               id="resourceName"
               type="text"
               value={resourceData.name}
               onChange={(e) => handleResourceInputChange('name', e.target.value)}
-              placeholder="e.g., First aid kit, Emergency generator"
+              placeholder={isSkillsCategory(resourceData.category) ? 'e.g., Doctor, Engineer, Translator' : 'e.g., First aid kit, Emergency generator'}
             />
           </div>
 
@@ -383,26 +463,54 @@ function App() {
             <select
               id="category"
               value={resourceData.category}
-              onChange={(e) => handleResourceInputChange('category', e.target.value)}
+              onChange={(e) => {
+                handleResourceInputChange('category', e.target.value)
+                // Reset subcategory when category changes
+                handleResourceInputChange('subcategory', '')
+              }}
             >
               <option value="">Select a category</option>
-              <option value="medical">Medical</option>
-              <option value="food">Food</option>
-              <option value="shelter">Shelter</option>
-              <option value="transportation">Transportation</option>
-              <option value="communication">Communication</option>
-              <option value="other">Other</option>
+              <option value="SKILLS">Skills</option>
+              <option value="FUEL">Fuel</option>
+              <option value="FOOD">Food</option>
+              <option value="WATER">Water</option>
+              <option value="MEDICAL_SUPPLIES">Medical Supplies</option>
+              <option value="SHELTER">Shelter</option>
+              <option value="TRANSPORT">Transport</option>
+              <option value="EQUIPMENT">Equipment</option>
+              <option value="COMMUNICATION">Communication</option>
+              <option value="OTHER">Other</option>
             </select>
           </div>
 
+          {resourceData.category && (
+            <div className="form-group">
+              <label htmlFor="subcategory">Subcategory</label>
+              <select
+                id="subcategory"
+                value={resourceData.subcategory}
+                onChange={(e) => handleResourceInputChange('subcategory', e.target.value)}
+              >
+                <option value="">Select a subcategory</option>
+                {Object.entries(subcategories[resourceData.category as keyof typeof subcategories] || {}).map(([key, label]) => (
+                  <option key={key} value={key}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           <div className="form-group">
-            <label htmlFor="quantity">Quantity</label>
+            <label htmlFor="quantity">
+              {isSkillsCategory(resourceData.category) ? 'No. Available People' : 'Quantity'}
+            </label>
             <input
               id="quantity"
               type="number"
               value={resourceData.quantity}
               onChange={(e) => handleResourceInputChange('quantity', e.target.value)}
-              placeholder="Number of items"
+              placeholder={isSkillsCategory(resourceData.category) ? 'Number of people available' : 'Number of items'}
               min="0"
             />
           </div>
@@ -499,7 +607,7 @@ function App() {
                   location_coordinates: [23.7610, 61.4981] as [number, number],
                   location_input: prev.location_input || 'Tampere'
                 }))}
-                style={{ fontSize: '0.9em', padding: '0.5rem', backgroundColor: '#f0f0f0' }}
+                style={{ fontSize: '0.9em', padding: '0.5rem', backgroundColor: '#495057', color: '#ffffff' }}
               >
                 Tampere
               </button>
@@ -510,7 +618,7 @@ function App() {
                   location_coordinates: [24.9458, 60.1699] as [number, number],
                   location_input: prev.location_input || 'Helsinki'
                 }))}
-                style={{ fontSize: '0.9em', padding: '0.5rem', backgroundColor: '#f0f0f0' }}
+                style={{ fontSize: '0.9em', padding: '0.5rem', backgroundColor: '#495057', color: '#ffffff' }}
               >
                 Helsinki
               </button>
@@ -521,7 +629,7 @@ function App() {
                   location_coordinates: [22.2783, 60.4506] as [number, number],
                   location_input: prev.location_input || 'Turku'
                 }))}
-                style={{ fontSize: '0.9em', padding: '0.5rem', backgroundColor: '#f0f0f0' }}
+                style={{ fontSize: '0.9em', padding: '0.5rem', backgroundColor: '#495057', color: '#ffffff' }}
               >
                 Turku
               </button>
@@ -532,7 +640,7 @@ function App() {
                   location_coordinates: [25.7350, 62.2415] as [number, number],
                   location_input: prev.location_input || 'Oulu'
                 }))}
-                style={{ fontSize: '0.9em', padding: '0.5rem', backgroundColor: '#f0f0f0' }}
+                style={{ fontSize: '0.9em', padding: '0.5rem', backgroundColor: '#495057', color: '#ffffff' }}
               >
                 Oulu
               </button>

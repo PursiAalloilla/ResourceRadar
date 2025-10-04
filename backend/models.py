@@ -12,15 +12,83 @@ class UserType(Enum):
     CORPORATE_ENTITY = 'CORPORATE_ENTITY'
     LOCAL_AUTHORITY = 'LOCAL_AUTHORITY'
 
+class Category(Enum):
+    SKILLS = "SKILLS"
+    FUEL = "FUEL"
+    FOOD = "FOOD"
+    WATER = "WATER"
+    MEDICAL_SUPPLIES = "MEDICAL_SUPPLIES"
+    SHELTER = "SHELTER"
+    TRANSPORT = "TRANSPORT"
+    EQUIPMENT = "EQUIPMENT"
+    COMMUNICATION = "COMMUNICATION"
+    OTHER = "OTHER"
+
+
+class Subcategory(Enum):
+    # SKILLS
+    MEDICAL = "MEDICAL"
+    CONSTRUCTION = "CONSTRUCTION"
+    IT = "IT"
+    LANGUAGE = "LANGUAGE"
+    MECHANIC = "MECHANIC"
+    OTHER = "OTHER"
+
+    # FUEL
+    DIESEL = "DIESEL"
+    GASOLINE = "GASOLINE"
+    PROPANE = "PROPANE"
+    BATTERIES = "BATTERIES"
+
+    # FOOD
+    NON_PERISHABLE = "NON_PERISHABLE"
+    PERISHABLE = "PERISHABLE"
+    BABY_FOOD = "BABY_FOOD"
+    PET_FOOD = "PET_FOOD"
+
+    # WATER
+    BOTTLED = "BOTTLED"
+    FILTERS = "FILTERS"
+    PURIFICATION_TABLETS = "PURIFICATION_TABLETS"
+
+    # MEDICAL_SUPPLIES
+    FIRST_AID = "FIRST_AID"
+    MEDICATION = "MEDICATION"
+    EQUIPMENT = "EQUIPMENT"
+
+    # SHELTER
+    TENTS = "TENTS"
+    BLANKETS = "BLANKETS"
+
+    # TRANSPORT
+    VEHICLES = "VEHICLES"
+    BOATS = "BOATS"
+    FUEL_TRUCKS = "FUEL_TRUCKS"
+
+    # EQUIPMENT
+    GENERATORS = "GENERATORS"
+    TOOLS = "TOOLS"
+    PROTECTIVE_GEAR = "PROTECTIVE_GEAR"
+
+    # COMMUNICATION
+    RADIOS = "RADIOS"
+    SATPHONES = "SATPHONES"
+    POWER_BANKS = "POWER_BANKS"
+
+    # OTHER
+    UNKNOWN = "UNKNOWN"
+
 class Resource(db.Model):
     __tablename__ = 'resources'
 
     id = db.Column(db.Integer, primary_key=True)
 
     # Core resource details
-    category = db.Column(db.String(120), nullable=True)
+    category = db.Column(SAEnum(Category), nullable=True)
+    subcategory = db.Column(SAEnum(Subcategory), nullable=True)
     name = db.Column(db.String(200), nullable=False)
     quantity = db.Column(db.Integer, nullable=True)
+    num_available_people = db.Column(db.Integer, nullable=True)
 
     # Location and distance info
     location_geojson = db.Column(JSON, nullable=True)
@@ -29,9 +97,9 @@ class Resource(db.Model):
 
     # Contact or ownership data
     phone_number = db.Column(db.String(64), nullable=True)
+    email = db.Column(db.String(255), nullable=True)
     first_name = db.Column(db.String(120), nullable=True)
     last_name = db.Column(db.String(120), nullable=True)
-    social_security_number = db.Column(db.String(64), nullable=True)
 
     # Source and metadata
     source_text = db.Column(db.Text, nullable=True)

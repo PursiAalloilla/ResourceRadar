@@ -1,7 +1,7 @@
 import os
 import json
 from typing import Dict, Any, Optional, List
-from models import AppSetting
+from models import AppSetting, Category, Subcategory
 from geopy.geocoders import Nominatim
 from geopy.distance import geodesic
 from openai import OpenAI
@@ -17,7 +17,7 @@ def _openai_extract(
 
     client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-    # Step 1: Extraction schema
+    # Step 1: Extraction schema (matches Resource model)
     extraction_schema = {
         "name": "ResourceExtractionList",
         "schema": {
@@ -29,14 +29,17 @@ def _openai_extract(
                         "type": "object",
                         "properties": {
                             "category": {"type": "string"},
+                            "subcategory": {"type": "string"},
                             "name": {"type": "string"},
                             "quantity": {"type": "integer"},
+                            "num_available_people": {"type": "integer"},
                             "location_text": {"type": "string"},
                             "first_name": {"type": "string"},
                             "last_name": {"type": "string"},
-                            "social_security_number": {"type": "string"}
+                            "email": {"type": "string"},
+                            "phone_number": {"type": "string"}
                         },
-                        "required": ["name"],
+                        "required": ["name", "category"],
                         "additionalProperties": False
                     }
                 }
@@ -46,27 +49,33 @@ def _openai_extract(
         }
     }
 
+    # List of allowed categories and subcategories
+    allowed_categories = [c.value for c in Category]
+    allowed_subcategories = [s.value for s in Subcategory]
+
     setting = AppSetting.query.first()
     model = setting.openai_model if setting and setting.openai_model else "gpt-4o-mini"
+
+    # Prompt: ensure LLM extracts only valid categories/subcategories and skips invalid resources
+    system_prompt = {
+        "role": "system",
+        "content": (
+            "You are an information extraction system for emergency resource reporting. "
+            "Extract ONLY resources that fit the predefined categories and subcategories. "
+            f"Allowed categories: {', '.join(allowed_categories)}. "
+            f"Allowed subcategories: {', '.join(allowed_subcategories)}. "
+            "If a mentioned item does not fit these categories, DO NOT include it. "
+            "If the location is missing, unclear, or cannot be localized, skip that resource. "
+            "Infer quantities from text ('few' → 3, 'dozen' → 12). "
+            "Return clean 'location_text' (e.g., 'Kilpisjärvi K-Market') suitable for geocoding. "
+            "Output MUST strictly match the provided JSON schema."
+        )
+    }
 
     resp = client.chat.completions.create(
         model=model,
         response_format={"type": "json_schema", "json_schema": extraction_schema},
-        messages=[
-            {
-                "role": "system",
-                "content": (
-                    "You must follow these instructions with absolute precision. "
-                    "Any deviation from the required JSON schema will be treated as a critical error. "
-                    "Return ONLY valid JSON matching the schema exactly. "
-                    "Do not include commentary or extra text. "
-                    "Use singular forms (e.g., 'generators' → 'generator'). "
-                    "Infer integers for quantity ('few' → 3, 'three dozen' → 36). "
-                    "Return clean 'location_text' suitable for geocoding, e.g. 'Kilpisjärvi K-Market'."
-                )
-            },
-            {"role": "user", "content": text},
-        ],
+        messages=[system_prompt, {"role": "user", "content": text}],
         temperature=0,
     )
 
@@ -92,8 +101,16 @@ def _openai_extract(
                 if loc:
                     dist = geodesic(incident_coords, (loc.latitude, loc.longitude)).km
                     r["distance_km"] = round(dist, 1)
+                    r["location_geojson"] = {
+                        "type": "Point",
+                        "coordinates": [loc.longitude, loc.latitude],
+                    }
+                else:
+                    r["location_geojson"] = None
             except Exception:
-                pass
+                r["location_geojson"] = None
+        else:
+            r["location_geojson"] = None
 
     # Step 3: Abuse detection
     abuse_schema = {
@@ -109,7 +126,7 @@ def _openai_extract(
                             "name": {"type": "string"},
                             "quantity": {"type": "integer"},
                             "flagged": {"type": "boolean"},
-                            "reason": {"type": "string"}
+                            "reason": {"type": "string"},
                         },
                         "required": ["name", "flagged"],
                         "additionalProperties": False
@@ -124,11 +141,11 @@ def _openai_extract(
     abuse_prompt = {
         "role": "system",
         "content": (
-            "You are a strict compliance auditor. Evaluate whether the listed resources "
-            "seem realistic for the given user type, incident location, and user location. "
-            "Flag items as 'flagged': true if quantities or types are implausible or too far "
-            "from the incident (e.g., '20 trucks' for a civilian 2000 km away). "
-            "Provide concise reasoning in 'reason'."
+            "You are a compliance auditor. Evaluate whether each listed resource is realistic "
+            "for the given user type, location, and distance. "
+            "Flag resources as 'flagged': true if quantities or types are implausible, "
+            "unrelated to emergencies, or suspicious. "
+            "Only provide 'reason' if flagged=true; omit or leave blank otherwise."
         ),
     }
 
@@ -152,16 +169,25 @@ def _openai_extract(
     abuse_result = json.loads(abuse_resp.choices[0].message.content)
     flagged_items = {r["name"]: r for r in abuse_result.get("resources", [])}
 
+    final_resources = []
     for r in resources:
+        # Skip resources with no location
+        if not r.get("location_geojson"):
+            continue
+
         abuse_data = flagged_items.get(r["name"])
         if abuse_data:
-            r["flagged"] = abuse_data.get("flagged", False)
-            r["abuse_reason"] = abuse_data.get("reason")
+            flagged = abuse_data.get("flagged", False)
+            r["flagged"] = flagged
+            r["abuse_reason"] = abuse_data.get("reason") if flagged else None
         else:
             r["flagged"] = False
             r["abuse_reason"] = None
 
-    return resources
+        final_resources.append(r)
+
+    return final_resources
+
 
 
 
