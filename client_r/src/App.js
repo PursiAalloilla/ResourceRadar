@@ -58,13 +58,8 @@ function App() {
       // update state
       setCenter([ mapCenter.lng, mapCenter.lat ])
       setZoom(mapZoom)
-      // scaling the markers
-      /*
-      const scalePercent = 1 + (map.getZoom() - 8)  * 0.4;
-      const svgElement = marker.getElement().children[0];
-      svgElement.style.transform = `scale(${scalePercent})`;
-      svgElement.style.transformOrigin = 'bottom';
-        */
+
+
     })
 
   
