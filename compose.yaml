@@ -15,7 +15,7 @@ services:
     build: client_r
     restart: unless-stopped
     volumes:
-      - ./client:/app
+      - ./client_r:/app
     ports:
       - 3000:3000
     depends_on:

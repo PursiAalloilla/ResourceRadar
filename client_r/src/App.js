@@ -1,25 +1,34 @@
-import logo from './logo.svg';
+import { useRef, useEffect } from 'react'
+import mapboxgl from 'mapbox-gl'
+
+import 'mapbox-gl/dist/mapbox-gl.css';
+
 import './App.css';
 
-function App() {
-  return (
-    <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.js</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
-    </div>
-  );
-}
+const MAPBOX_TOKEN = process.env.REACT_APP_MAPBOX_TOKEN;
 
+console.log(MAPBOX_TOKEN);
+
+function App() {
+
+  const mapRef = useRef()
+  const mapContainerRef = useRef()
+
+    useEffect(() => {
+    mapboxgl.accessToken = MAPBOX_TOKEN 
+    mapRef.current = new mapboxgl.Map({
+      container: mapContainerRef.current,
+    });
+
+    return () => {
+      mapRef.current.remove()
+    }
+  }, [])
+
+  return (
+    <>
+      <div id='map-container' ref={mapContainerRef}/>
+    </>
+  )
+}
 export default App;
