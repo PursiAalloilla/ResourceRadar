@@ -1,1 +1,1 @@
-web: gunicorn --bind 0.0.0.0:$PORT --workers 4 backend.static_server:create_static_app()
+web: gunicorn --bind 0.0.0.0:$PORT --workers 4 backend.static_server:create_static_app
