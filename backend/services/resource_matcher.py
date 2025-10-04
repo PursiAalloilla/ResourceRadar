@@ -1,122 +1,127 @@
-# services/resource_matcher.py
+import os
+import json
+from typing import List, Dict, Any, Optional
+from openai import OpenAI
+from models import Resource, AppSetting
+from flask import current_app
 
-import math
-from typing import List, Dict, Any
-from models import Resource
-from services.geocode import geocode_to_geojson
-from services.llm import extract_resource_fields
-
-# Helper: haversine distance in km
-def haversine(lat1, lon1, lat2, lon2):
-    R = 6371
-    dlat = math.radians(lat2 - lat1)
-    dlon = math.radians(lon2 - lon1)
-    a = math.sin(dlat / 2)**2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon / 2)**2
-    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
-    return R * c
-
-
-# services/resource_matcher.py
-
-import math
-from typing import List, Dict, Any, Union
-from models import Resource
-from services.geocode import geocode_to_geojson
-from services.llm import extract_resource_fields
-
-# Helper: haversine distance in km
-def haversine(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    R = 6371  # km
-    dlat = math.radians(lat2 - lat1)
-    dlon = math.radians(lon2 - lon1)
-    a = (
-        math.sin(dlat / 2)**2
-        + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon / 2)**2
-    )
-    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
-    return R * c
-
-
-def match_resources_to_situation(situation_text: str, max_results: int = 10) -> List[Dict[str, Any]]:
+def match_resources_to_situation(
+    situation: str,
+    incident_location_geojson: Optional[Dict[str, Any]] = None
+) -> List[Dict[str, Any]]:
     """
-    Given a situation (e.g. 'there's been a fire near K-Market Kilpisjärvi'),
-    extract location + relevant categories, find nearby resources and rank them.
+    Uses OpenAI to identify which stored resources best match the described emergency situation.
+    Returns a ranked list of relevant resources with reasoning and full location data.
+
+    Args:
+        situation: A human-readable description of the current emergency.
+        incident_location_geojson: Optional GeoJSON representing the incident area.
     """
 
-    # 1) Extract location from situation using LLM
-    extracted = extract_resource_fields(situation_text)
-    if isinstance(extracted, list):
-        location_text = next((e.get('location_text') for e in extracted if e.get('location_text')), None)
-    elif isinstance(extracted, dict):
-        location_text = extracted.get('location_text')
-    else:
-        location_text = None
+    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    setting = AppSetting.query.first()
+    model = setting.openai_model if setting and setting.openai_model else "gpt-4o-mini"
 
-    if not location_text:
-        # crude fallback: use the entire situation as location
-        location_text = situation_text
-
-    # 2) Geocode the location
-    geo = geocode_to_geojson(location_text)
-    if not geo:
-        return []
-
-    # Support both Feature and Point
-    if geo.get('type') == 'Point':
-        lon, lat = geo['coordinates']
-    elif geo.get('geometry', {}).get('type') == 'Point':
-        lon, lat = geo['geometry']['coordinates']
-    else:
-        return []
-
-    # 3) Derive relevant categories from situation keywords
-    situation_lower = situation_text.lower()
-    relevant_categories = set()
-    if "fire" in situation_lower:
-        relevant_categories.update(["water", "shelter", "tools", "electricity"])
-    if "flood" in situation_lower:
-        relevant_categories.update(["boats", "water", "food", "shelter"])
-    if "earthquake" in situation_lower:
-        relevant_categories.update(["shelter", "tools", "medical"])
-    # (You can expand this mapping later)
-
-    # 4) Score all resources
+    # --- 1. Fetch all resources ---
     resources = Resource.query.all()
-    scored = []
-    for r in resources:
-        if not r.location_geojson:
-            continue
+    if not resources:
+        return []
 
-        # Handle Feature or Point in stored resource location
-        if r.location_geojson.get('type') == 'Point':
-            loc_lon, loc_lat = r.location_geojson['coordinates']
-        else:
-            loc_lon, loc_lat = r.location_geojson['geometry']['coordinates']
-
-        dist = haversine(lat, lon, loc_lat, loc_lon)
-        score = -dist  # closer is better
-
-        if r.category and r.category.lower() in relevant_categories:
-            score += 100  # strong category match
-
-        scored.append((score, r))
-
-    # 5) Return top N sorted by score
-    scored.sort(key=lambda x: x[0], reverse=True)
-    top_resources = scored[:max_results]
-
-    return [
+    resources_data = [
         {
             "id": r.id,
             "category": r.category,
             "name": r.name,
             "quantity": r.quantity,
-            "location": r.location_geojson,
-            "phone_number": r.phone_number,
-            "first_name": r.first_name,
-            "last_name": r.last_name,
             "user_type": r.user_type.value if r.user_type else None,
-            "score": score
+            "flagged": r.flagged,
+            "location_text": r.location_text,
+            "location_geojson": r.location_geojson,
         }
-        for score, r in top_resources
+        for r in resources
     ]
+
+    # --- 2. Define schema for OpenAI structured response ---
+    match_schema = {
+        "name": "MatchedResourceList",
+        "schema": {
+            "type": "object",
+            "properties": {
+                "matches": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "resource_id": {"type": "integer"},
+                            "relevance_score": {"type": "number"},
+                            "reason": {"type": "string"}
+                        },
+                        "required": ["resource_id", "relevance_score"],
+                        "additionalProperties": False
+                    }
+                }
+            },
+            "required": ["matches"],
+            "additionalProperties": False
+        }
+    }
+
+    # --- 3. System instruction for the model ---
+    system_prompt = (
+        "You are an emergency coordination AI. "
+        "Given an emergency situation and a list of available resources, "
+        "determine which ones are most relevant for responding to the crisis. "
+        "Use category, quantity, user_type, and proximity (based on coordinates) "
+        "to rank relevance. Flagged resources should be ignored or scored low. "
+        "Return a list of matched resources with relevance_score (0.0–1.0) and reasoning."
+    )
+
+    # --- 4. Build the contextual payload ---
+    user_context = {
+        "situation": situation,
+        "incident_location_geojson": incident_location_geojson,
+        "resources": resources_data,
+    }
+
+    try:
+        resp = client.chat.completions.create(
+            model=model,
+            response_format={"type": "json_schema", "json_schema": match_schema},
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": json.dumps(user_context, ensure_ascii=False)},
+            ],
+            temperature=0,
+        )
+
+        data = json.loads(resp.choices[0].message.content)
+        matches = data.get("matches", [])
+
+        # --- 5. Sort by relevance descending ---
+        matches = sorted(matches, key=lambda m: m.get("relevance_score", 0), reverse=True)
+
+        # --- 6. Enrich with full resource details ---
+        id_map = {r.id: r for r in resources}
+        enriched = []
+        for m in matches:
+            r = id_map.get(m["resource_id"])
+            if not r:
+                continue
+            enriched.append({
+                "id": r.id,
+                "category": r.category,
+                "name": r.name,
+                "quantity": r.quantity,
+                "user_type": r.user_type.value if r.user_type else None,
+                "flagged": r.flagged,
+                "location_text": r.location_text,
+                "location_geojson": r.location_geojson,
+                "relevance_score": m["relevance_score"],
+                "reason": m.get("reason", ""),
+            })
+
+        return enriched
+
+    except Exception as e:
+        current_app.logger.error(f"[resource_matcher] OpenAI matching failed: {e}")
+        return []

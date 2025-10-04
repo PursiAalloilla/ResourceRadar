@@ -1,0 +1,213 @@
+:root {
+  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+
+  color-scheme: dark;
+  color: #00ff41;
+  background-color: #0a0a0a;
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+a {
+  font-weight: 500;
+  color: #00ff41;
+  text-decoration: inherit;
+}
+a:hover {
+  color: #00cc33;
+  text-shadow: 0 0 10px #00ff41;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background: linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 100%);
+  color: #00ff41;
+}
+
+h1 {
+  font-size: 3.2em;
+  line-height: 1.1;
+  color: #00ff41;
+  text-shadow: 0 0 20px #00ff41;
+}
+
+h2 {
+  color: #00ff41;
+  text-shadow: 0 0 10px #00ff41;
+}
+
+button {
+  border-radius: 8px;
+  border: 2px solid #00ff41;
+  padding: 0.8em 1.6em;
+  font-size: 1em;
+  font-weight: 600;
+  font-family: inherit;
+  background-color: transparent;
+  color: #00ff41;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+button:hover {
+  background-color: #00ff41;
+  color: #0a0a0a;
+  box-shadow: 0 0 20px #00ff41;
+  transform: translateY(-2px);
+}
+button:focus,
+button:focus-visible {
+  outline: 2px solid #00ff41;
+  outline-offset: 2px;
+}
+
+input, select {
+  border-radius: 8px;
+  border: 2px solid #00ff41;
+  padding: 0.8em 1em;
+  font-size: 1em;
+  font-family: inherit;
+  background-color: transparent;
+  color: #00ff41;
+  transition: all 0.3s ease;
+  width: 100%;
+}
+input:focus, select:focus {
+  outline: none;
+  box-shadow: 0 0 15px #00ff41;
+  border-color: #00cc33;
+}
+input::placeholder {
+  color: #00ff4166;
+}
+
+.container {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 2rem;
+  text-align: center;
+}
+
+.form-container {
+  max-width: 500px;
+  margin: 0 auto;
+  padding: 2rem;
+  border: 2px solid #00ff41;
+  border-radius: 12px;
+  background: rgba(0, 255, 65, 0.05);
+  box-shadow: 0 0 30px rgba(0, 255, 65, 0.2);
+}
+
+.form-group {
+  margin-bottom: 1.5rem;
+  text-align: left;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-weight: 600;
+  color: #00ff41;
+  text-shadow: 0 0 5px #00ff41;
+}
+
+.error-message {
+  color: #ff4444;
+  margin-top: 0.5rem;
+  text-shadow: 0 0 10px #ff4444;
+}
+
+.success-message {
+  color: #00ff41;
+  margin-top: 0.5rem;
+  text-shadow: 0 0 10px #00ff41;
+}
+
+.code-input {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: center;
+  margin: 2rem 0;
+}
+
+.code-digit {
+  width: 50px;
+  height: 50px;
+  text-align: center;
+  font-size: 1.5em;
+  font-weight: bold;
+  border: 2px solid #00ff41;
+  border-radius: 8px;
+  background-color: rgba(0, 255, 65, 0.1);
+  color: #00ff41 !important;
+  caret-color: #00ff41;
+  text-shadow: 0 0 10px #00ff41;
+  box-shadow: inset 0 0 10px rgba(0, 255, 65, 0.3);
+}
+
+.code-digit:focus {
+  background-color: rgba(0, 255, 65, 0.2);
+  border-color: #00cc33;
+  box-shadow: 0 0 15px #00ff41, inset 0 0 10px rgba(0, 255, 65, 0.3);
+}
+
+.code-digit::-webkit-input-placeholder {
+  color: #00ff4166;
+}
+
+.code-digit::-moz-placeholder {
+  color: #00ff4166;
+}
+
+.code-digit:-ms-input-placeholder {
+  color: #00ff4166;
+}
+
+.splash-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  animation: fadeIn 2s ease-in-out;
+}
+
+.logo-placeholder {
+  width: 200px;
+  height: 200px;
+  border: 3px solid #00ff41;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 2rem;
+  box-shadow: 0 0 30px rgba(0, 255, 65, 0.5);
+}
+
+.powered-by {
+  font-size: 1.2em;
+  color: #00ff4166;
+  margin-bottom: 1rem;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes glow {
+  0%, 100% { text-shadow: 0 0 10px #00ff41; }
+  50% { text-shadow: 0 0 20px #00ff41, 0 0 30px #00ff41; }
+}

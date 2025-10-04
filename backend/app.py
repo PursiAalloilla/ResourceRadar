@@ -2,11 +2,13 @@ import os
 from flask import Flask
 from dotenv import load_dotenv
 from extensions import db
+from flask_cors import CORS
 
 load_dotenv()
 
 def create_app():
     app = Flask(__name__)
+    CORS(app, resources={r"/api/*": {"origins": "*"}})
     app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URI', 'sqlite:///emergency_support.db')
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
