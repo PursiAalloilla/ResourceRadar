@@ -1,39 +1,32 @@
 services:
-  server:
-    build: server
+  # Backend - dev mode, exposed for browser access
+  backend:
+    build: backend
     restart: unless-stopped
     volumes:
-      - ./server:/app
-    ports:
-      - 8000:8000
+      - ./backend:/app
     env_file:
       - project.env
-    depends_on:
-      - database
+    ports:
+      - 5000:5000
 
-  client:
-    build: client_r
+  # Frontend apps - production mode, accessible from browser
+  consumer-app:
+    build: consumer-app
     restart: unless-stopped
-    volumes:
-      - ./client_r:/app
     ports:
       - 3000:3000
+    environment:
+      - VITE_API_URL=http://localhost:5000
     depends_on:
-      - server
-  
-  database:
-    container_name: postgresql_database
-    image: postgres:17.0
+      - backend
+
+  legal-entity-consumer-app:
+    build: legal-entity-consumer-app
     restart: unless-stopped
-    env_file:
-       - project.env
-  
-  database-migrations:
-    image: flyway/flyway:10
-    env_file:
-      - project.env
+    ports:
+      - 3001:3001
+    environment:
+      - VITE_API_URL=http://localhost:5000
     depends_on:
-      - database
-    volumes:
-      - ./database-migrations:/flyway/sql
-    command: -connectRetries=60 -baselineOnMigrate=true migrate
+      - backend

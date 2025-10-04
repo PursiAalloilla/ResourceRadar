@@ -2,29 +2,9 @@ import os
 import json
 from typing import Dict, Any, Optional, List
 from models import AppSetting
-from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline
 from geopy.geocoders import Nominatim
 from geopy.distance import geodesic
 from openai import OpenAI
-
-_hf_pipeline_cache = None
-
-
-# ----- Hugging Face preload -----
-def preload_hf_model(model_id: str, device: str = 'cpu'):
-    """Load Hugging Face model once at startup and cache the pipeline."""
-    global _hf_pipeline_cache
-    if _hf_pipeline_cache is not None:
-        return _hf_pipeline_cache
-    tok = AutoTokenizer.from_pretrained(model_id)
-    mdl = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype="auto")
-    _hf_pipeline_cache = pipeline(
-        'text-generation',
-        model=mdl,
-        tokenizer=tok,
-        device_map='auto' if device == 'auto' else None
-    )
-    return _hf_pipeline_cache
 
 
 # ----- OpenAI extraction and abuse detection -----
@@ -184,32 +164,6 @@ def _openai_extract(
     return resources
 
 
-# ----- Hugging Face fallback -----
-def _hf_extract(text: str) -> Dict[str, Any]:
-    global _hf_pipeline_cache
-    if _hf_pipeline_cache is None:
-        setting = AppSetting.query.first()
-        preload_hf_model(
-            setting.hf_model_id if setting else 'microsoft/Phi-3.5-MoE-instruct',
-            setting.hf_device if setting else 'cpu'
-        )
-
-    gen = _hf_pipeline_cache
-    prompt = (
-        "You are an information extractor. Given a message, produce ONLY a compact JSON object with keys: "
-        "category (string), name (string), quantity (integer or null), location_text (string or null), "
-        "first_name (string or null), last_name (string or null), social_security_number (string or null)."
-    )
-
-    out = gen(prompt + f"\nMessage: {text}\nJSON:", max_new_tokens=256, do_sample=False)[0]['generated_text']
-    import re
-    m = re.search(r"\{[\s\S]*\}", out)
-    if not m:
-        return {"name": None}
-    try:
-        return json.loads(m.group(0))
-    except json.JSONDecodeError:
-        return {"name": None}
 
 
 # ----- Public entrypoint -----
@@ -219,16 +173,10 @@ def extract_resource_fields(
     user_type: Optional[str] = "civilian",
     user_location: Optional[dict] = None
 ) -> List[Dict[str, Any]]:
-    """Dispatch extraction depending on backend."""
-    setting = AppSetting.query.first()
-    backend = (setting.llm_backend if setting else 'hf').lower()
-    if backend == 'openai':
-        return _openai_extract(
-            text=text,
-            incident_location=incident_location,
-            user_type=user_type,
-            user_location=user_location
-        )
-
-    # Hugging Face fallback
-    return [_hf_extract(text)]
+    """Extract resources using OpenAI."""
+    return _openai_extract(
+        text=text,
+        incident_location=incident_location,
+        user_type=user_type,
+        user_location=user_location
+    )
