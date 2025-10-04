@@ -10,7 +10,6 @@ class UserType(Enum):
     CORPORATE = 'corporate'
     CIVILIAN = 'civilian'
     CORPORATE_ENTITY = 'corporate entity'
-    AI_MODEL = 'ai model'
 
 
 class Resource(db.Model):
