@@ -1,4 +1,4 @@
-import { useRef, useEffect } from 'react'
+import { useRef, useEffect, useState } from 'react'
 import mapboxgl from 'mapbox-gl'
 
 import 'mapbox-gl/dist/mapbox-gl.css';
@@ -8,7 +8,6 @@ import './App.css';
 
 //importing the mapbox token from .env
 const MAPBOX_TOKEN = process.env.REACT_APP_MAPBOX_TOKEN;
-console.log(MAPBOX_TOKEN);
 
 
 //setting the intiial view
@@ -33,15 +32,40 @@ function App() {
       zoom: zoom
     });
 
+    mapRef.current.on('move', () => {
+      // get the current center coordinates and zoom level from the map
+      const mapCenter = mapRef.current.getCenter()
+      const mapZoom = mapRef.current.getZoom()
+
+      // update state
+      setCenter([ mapCenter.lng, mapCenter.lat ])
+      setZoom(mapZoom)
+    })
+
+  
     return () => {
       mapRef.current.remove()
     }
   }, [])
 
-  return (
+const handleButtonClick = () => {
+  mapRef.current.flyTo({
+    center: INITIAL_CENTER,
+    zoom: INITIAL_ZOOM
+  })
+  }
+
+
+return (
     <>
+      <div className="sidebar">
+        Longitude: {center[0].toFixed(4)} | Latitude: {center[1].toFixed(4)} | Zoom: {zoom.toFixed(2)}
+      </div>
+      <button className='reset-button' onClick={handleButtonClick}>
+        Reset
+      </button>
       <div id='map-container' ref={mapContainerRef}/>
     </>
-  )
+)
 }
 export default App;
