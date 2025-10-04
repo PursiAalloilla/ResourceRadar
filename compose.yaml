@@ -1,25 +1,32 @@
 services:
-
+  # Backend - dev mode, exposed for browser access
   backend:
     build: backend
     restart: unless-stopped
     volumes:
-      - ./backend:/app/backend
-      - ./emergency_support.db:/app/emergency_support.db
-    ports:
-      - 5000:5000
+      - ./backend:/app
     env_file:
       - project.env
-    #depends_on:
-    #  - database
+    ports:
+      - 5000:5000
 
-  client:
-    build: client_r
+  # Frontend apps - production mode, accessible from browser
+  consumer-app:
+    build: consumer-app
     restart: unless-stopped
-    volumes:
-      - ./client_r:/app
     ports:
       - 3000:3000
+    environment:
+      - VITE_API_URL=http://localhost:5000
     depends_on:
       - backend
-  
+
+  legal-entity-consumer-app:
+    build: legal-entity-consumer-app
+    restart: unless-stopped
+    ports:
+      - 3001:3001
+    environment:
+      - VITE_API_URL=http://localhost:5000
+    depends_on:
+      - backend

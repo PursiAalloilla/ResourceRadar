@@ -57,7 +57,4 @@ class AppSetting(db.Model):
     __tablename__ = 'app_settings'
 
     id = db.Column(db.Integer, primary_key=True)
-    llm_backend = db.Column(db.String(20), default='hf')
-    hf_model_id = db.Column(db.String(200), default='microsoft/Phi-3.5-MoE-instruct')
-    hf_device = db.Column(db.String(16), default='cpu')
     openai_model = db.Column(db.String(50), default='gpt-4o-mini')
