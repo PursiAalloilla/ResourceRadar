@@ -18,6 +18,8 @@ function App() {
     mapboxgl.accessToken = MAPBOX_TOKEN 
     mapRef.current = new mapboxgl.Map({
       container: mapContainerRef.current,
+      center: [ 25.631302 , 64.984528],
+      zoom: 4.5
     });
 
     return () => {
