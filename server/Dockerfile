@@ -1,11 +1,14 @@
-FROM denoland/deno:alpine-2.3.5
+FROM denoland/deno:2.0
 
+# Set working directory
 WORKDIR /app
 
-COPY deno.json .
+# Copy only deps first (caching)
+COPY server/ ./
 
-RUN DENO_FUTURE=1 deno install
+# Copy the rest of the server code
+COPY server/ ./server
+COPY database.db ./database.db
 
-COPY . .
-
-CMD [ "run", "--allow-env", "--allow-net", "--watch", "app-run.js" ]
+# Grant permissions for filesystem and network
+CMD ["run", "--allow-net", "--allow-read", "--allow-write", "app-run.js"]

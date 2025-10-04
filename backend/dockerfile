@@ -1,0 +1,20 @@
+# Use Miniconda as base image
+FROM continuumio/miniconda3
+
+WORKDIR /app
+
+COPY env.yaml /app/env.yaml
+COPY . /app
+
+# Create the environment
+RUN conda install -n base -c conda-forge mamba && \
+    mamba env create -f env.yaml
+
+# Activate the environment and set PATH
+SHELL ["conda", "run", "-n", "aalto_defence_hackathon_server_env", "/bin/bash", "-c"]
+
+# Expose the port your app runs on
+EXPOSE 5000
+
+# Run your app with the environment activated
+CMD ["conda", "run", "--no-capture-output", "-n", "aalto_defence_hackathon_server_env", "python", "app.py"]

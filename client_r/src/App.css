@@ -35,3 +35,49 @@
   border-radius: 10px;
   cursor: pointer;
 }
+
+.it {
+  background-image: url('./assets/icons/IT.png');
+  background-size: cover;
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.language {
+  background-image: url('./assets/icons/Language.png');
+  background-size: cover;
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  cursor: pointer;
+}
+.construction {
+  background-image: url('./assets/icons/Construction.png');
+  background-size: cover;
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.mechanic {
+  background-image: url('./assets/icons/Mechanic.png');
+  background-size: cover;
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+
+.medical {
+  background-image: url('./assets/icons/Medical.png');
+  background-size: cover;
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  cursor: pointer;
+}
+

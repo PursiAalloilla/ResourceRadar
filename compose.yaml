@@ -1,15 +1,17 @@
 services:
-  server:
-    build: server
+
+  backend:
+    build: backend
     restart: unless-stopped
     volumes:
-      - ./server:/app
+      - ./backend:/app/backend
+      - ./emergency_support.db:/app/emergency_support.db
     ports:
-      - 8000:8000
+      - 5000:5000
     env_file:
       - project.env
-    depends_on:
-      - database
+    #depends_on:
+    #  - database
 
   client:
     build: client_r
@@ -19,21 +21,5 @@ services:
     ports:
       - 3000:3000
     depends_on:
-      - server
+      - backend
   
-  database:
-    container_name: postgresql_database
-    image: postgres:17.0
-    restart: unless-stopped
-    env_file:
-       - project.env
-  
-  database-migrations:
-    image: flyway/flyway:10
-    env_file:
-      - project.env
-    depends_on:
-      - database
-    volumes:
-      - ./database-migrations:/flyway/sql
-    command: -connectRetries=60 -baselineOnMigrate=true migrate

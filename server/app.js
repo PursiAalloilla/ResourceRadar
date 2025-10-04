@@ -13,9 +13,12 @@ app.use("/*", logger());
 
 app.get("/", (c) => c.json({ message: "Hello world!" }));
 
-app.get("/todos", async (c) => {
+app.get("/Emergency/[]", async (c) => {
   const todos = await sql`SELECT * FROM todos`;
   return c.json(todos);
 });
+
+app.get("/")
+
 
 export default app; 
