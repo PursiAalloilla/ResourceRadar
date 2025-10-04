@@ -28,7 +28,8 @@ def process_message():
       "audio": null,                    # ignored unless multipart
       "metadata": {
          "phone_number": "+358...",
-         "location": {GeoJSON or None},
+         "incident_location": {GeoJSON},  # REQUIRED, incident location
+         "user_location": {GeoJSON or None},  # OPTIONAL, user location
          "first_name": "...", "last_name": "...",
          "social_security_number": "...",
          "user_type": "NGO|corporate|civilian|corporate entity|ai model"
@@ -39,6 +40,7 @@ def process_message():
     """
     payload = {}
 
+    # --- Parse request content ---
     if request.content_type and request.content_type.startswith('multipart/form-data'):
         # audio upload path
         meta_json = request.form.get('metadata', '{}')
@@ -67,23 +69,26 @@ def process_message():
     if not text:
         return jsonify({"error": "No text to process (provide text or audio)."}), 400
 
-    extracted_list = extract_resource_fields(text)
+    # --- Extract metadata inputs ---
+    incident_location = metadata.get("incident_location")  # GeoJSON (required)
+    if not incident_location:
+        return jsonify({"error": "Missing required 'incident_location' field in metadata."}), 400
+
+    user_location = metadata.get("user_location")  # GeoJSON (optional)
+    user_type_val = metadata.get("user_type")
+
+    # --- Extract resources using LLM ---
+    extracted_list = extract_resource_fields(
+        text=text,
+        incident_location=incident_location,
+        user_type=user_type_val,
+        user_location=user_location  # Pass optional user location to LLM
+    )
     if not extracted_list:
         return jsonify({"error": "Could not extract any resources from the message."}), 400
 
-    # --- Resolve location ONCE ---
-    metadata_location = metadata.get('location')
-    if metadata_location:
-        location_geojson = metadata_location
-    else:
-        # take the first non-null location_text among extracted resources
-        location_text = next(
-            (res.get('location_text') for res in extracted_list if res.get('location_text')),
-            None
-        )
-        print("Geocoding location text:", location_text)
-        location_geojson = geocode_to_geojson(location_text) if location_text else None
-        print("Resolved location geojson:", location_geojson)
+    # --- Resolve fallback location for resource saving ---
+    location_geojson = incident_location
 
     resources_created = []
 
@@ -93,7 +98,6 @@ def process_message():
         last_name = extracted.get('last_name') or metadata.get('last_name')
         ssn = extracted.get('social_security_number') or metadata.get('social_security_number')
 
-        user_type_val = metadata.get('user_type')
         user_type = None
         if user_type_val:
             try:
@@ -110,15 +114,21 @@ def process_message():
             category=extracted.get('category'),
             name=extracted.get('name') or 'unknown',
             quantity=quantity,
-            location_geojson=location_geojson,   # <-- SAME for all
+            location_geojson=extracted.get("location_geojson") or location_geojson,
             phone_number=phone,
             first_name=first_name,
             last_name=last_name,
             social_security_number=ssn,
             source_text=text,
             user_type=user_type,
-            created_at=datetime.utcnow()
+            created_at=datetime.utcnow(),
+            flagged=extracted.get('flagged', False),
+            abuse_reason=extracted.get('abuse_reason'),
         )
+
+        if extracted.get("distance_km") is not None:
+            resource.distance_km = extracted["distance_km"]
+
         db.session.add(resource)
         resources_created.append(resource)
 
@@ -133,6 +143,9 @@ def process_message():
                 "name": r.name,
                 "quantity": r.quantity,
                 "location": r.location_geojson,
+                "distance_km": getattr(r, "distance_km", None),
+                "flagged": r.flagged,
+                "abuse_reason": r.abuse_reason,
                 "phone_number": r.phone_number,
                 "created_at": r.created_at.isoformat() + 'Z',
                 "first_name": r.first_name,
@@ -143,6 +156,8 @@ def process_message():
             for r in resources_created
         ]
     }), 201
+
+
 
 @api_bp.get('/resources/')
 def list_resources():
