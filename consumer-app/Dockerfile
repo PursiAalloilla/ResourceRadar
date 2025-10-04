@@ -9,8 +9,12 @@ RUN npm run build
 # Stage 2: Serve built files
 FROM node:20-slim
 WORKDIR /app
+RUN npm install -g serve
 COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/package*.json ./
-RUN npm ci --omit=dev
-EXPOSE 3000
-CMD ["npx", "vite", "preview", "--host", "0.0.0.0", "--port", "3000"]
+
+# Use Heroku-assigned port
+ENV PORT=3000
+EXPOSE $PORT
+
+# Serve built static files
+CMD serve -s dist -l $PORT

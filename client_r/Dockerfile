@@ -1,4 +1,4 @@
-# Use Node.js 20 for consistency with other services
+# Use Node.js 20 for consistency
 FROM node:20
 
 # Set working directory
@@ -8,9 +8,9 @@ WORKDIR /app
 COPY package*.json ./
 
 # Install dependencies
-RUN npm install
+RUN npm i
 
-# Copy source code
+# Copy the rest of the source code
 COPY . .
 
 # Build the application
@@ -19,8 +19,9 @@ RUN npm run build
 # Install serve to serve static files
 RUN npm install -g serve
 
-# Expose port
-EXPOSE 3000
+# Use Heroku-assigned port
+ENV PORT=3002
+EXPOSE $PORT
 
-# Start the application with serve
-CMD ["serve", "-s", "build", "-l", "3000"]
+# Serve the built React app
+CMD serve -s build -l $PORT

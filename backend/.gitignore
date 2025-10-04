@@ -1,3 +1,4 @@
 .env
 __pycache__/
-services/__pycache__/
+/services/__pycache__/
+/instance/emergency_support.db
