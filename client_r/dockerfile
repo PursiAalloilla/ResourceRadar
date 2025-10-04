@@ -1,20 +1,26 @@
-# Use the latest LTS version of Node.js
-FROM node:18-alpine
- 
-# Set the working directory inside the container
+# Use Node.js 20 for consistency with other services
+FROM node:20
+
+# Set working directory
 WORKDIR /app
- 
-# Copy package.json and package-lock.json
+
+# Copy package files
 COPY package*.json ./
- 
+
 # Install dependencies
 RUN npm install
- 
-# Copy the rest of your application files
+
+# Copy source code
 COPY . .
- 
-# Expose the port your app runs on
+
+# Build the application
+RUN npm run build
+
+# Install serve to serve static files
+RUN npm install -g serve
+
+# Expose port
 EXPOSE 3000
- 
-# Define the command to run your app
-CMD ["npm", "start"]
+
+# Start the application with serve
+CMD ["serve", "-s", "build", "-l", "3000"]
