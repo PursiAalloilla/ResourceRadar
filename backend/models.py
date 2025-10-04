@@ -16,21 +16,36 @@ class Resource(db.Model):
     __tablename__ = 'resources'
 
     id = db.Column(db.Integer, primary_key=True)
+
+    # Core resource details
     category = db.Column(db.String(120), nullable=True)
     name = db.Column(db.String(200), nullable=False)
     quantity = db.Column(db.Integer, nullable=True)
-    location_geojson = db.Column(JSON, nullable=True)
-    phone_number = db.Column(db.String(64), nullable=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+    # Location and distance info
+    location_geojson = db.Column(JSON, nullable=True)
+    location_text = db.Column(db.String(255), nullable=True)
+    distance_km = db.Column(db.Float, nullable=True)
+
+    # Contact or ownership data
+    phone_number = db.Column(db.String(64), nullable=True)
     first_name = db.Column(db.String(120), nullable=True)
     last_name = db.Column(db.String(120), nullable=True)
     social_security_number = db.Column(db.String(64), nullable=True)
 
+    # Source and metadata
     source_text = db.Column(db.Text, nullable=True)
     user_type = db.Column(SAEnum(UserType), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-    flagged = db.Column(db.Boolean, default=False, nullable=False) 
+    # Abuse detection flags
+    flagged = db.Column(db.Boolean, default=False, nullable=False)
+    abuse_reason = db.Column(db.Text, nullable=True)
+
+    def mark_flagged(self, reason: str):
+        """Helper method to mark a resource as suspicious."""
+        self.flagged = True
+        self.abuse_reason = reason
 
 
 class AppSetting(db.Model):
