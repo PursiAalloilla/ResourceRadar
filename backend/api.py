@@ -6,12 +6,13 @@ import tempfile
 from datetime import datetime
 from typing import Any, Dict
 
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, json
 
 from app import db
-from models import Resource, AppSetting, UserType
+from models import Resource, AppSetting, UserType, VerifiedEmail
 from services.geocode import geocode_to_geojson
 from services.transcribe import transcribe_audio
+from services.legal_entity_verification import verify_legal_entity
 
 api_bp = Blueprint('api', __name__)
 
@@ -28,7 +29,8 @@ def process_message():
       "audio": null,                    # ignored unless multipart
       "metadata": {
          "phone_number": "+358...",
-         "location": {GeoJSON or None},
+         "incident_location": {GeoJSON},  # REQUIRED, incident location
+         "user_location": {GeoJSON or None},  # OPTIONAL, user location
          "first_name": "...", "last_name": "...",
          "social_security_number": "...",
          "user_type": "NGO|corporate|civilian|corporate entity|ai model"
@@ -39,6 +41,7 @@ def process_message():
     """
     payload = {}
 
+    # --- Parse request content ---
     if request.content_type and request.content_type.startswith('multipart/form-data'):
         # audio upload path
         meta_json = request.form.get('metadata', '{}')
@@ -67,23 +70,26 @@ def process_message():
     if not text:
         return jsonify({"error": "No text to process (provide text or audio)."}), 400
 
-    extracted_list = extract_resource_fields(text)
+    # --- Extract metadata inputs ---
+    incident_location = metadata.get("incident_location")  # GeoJSON (required)
+    if not incident_location:
+        return jsonify({"error": "Missing required 'incident_location' field in metadata."}), 400
+
+    user_location = metadata.get("user_location")  # GeoJSON (optional)
+    user_type_val = metadata.get("user_type")
+
+    # --- Extract resources using LLM ---
+    extracted_list = extract_resource_fields(
+        text=text,
+        incident_location=incident_location,
+        user_type=user_type_val,
+        user_location=user_location  # Pass optional user location to LLM
+    )
     if not extracted_list:
         return jsonify({"error": "Could not extract any resources from the message."}), 400
 
-    # --- Resolve location ONCE ---
-    metadata_location = metadata.get('location')
-    if metadata_location:
-        location_geojson = metadata_location
-    else:
-        # take the first non-null location_text among extracted resources
-        location_text = next(
-            (res.get('location_text') for res in extracted_list if res.get('location_text')),
-            None
-        )
-        print("Geocoding location text:", location_text)
-        location_geojson = geocode_to_geojson(location_text) if location_text else None
-        print("Resolved location geojson:", location_geojson)
+    # --- Resolve fallback location for resource saving ---
+    location_geojson = incident_location
 
     resources_created = []
 
@@ -93,7 +99,6 @@ def process_message():
         last_name = extracted.get('last_name') or metadata.get('last_name')
         ssn = extracted.get('social_security_number') or metadata.get('social_security_number')
 
-        user_type_val = metadata.get('user_type')
         user_type = None
         if user_type_val:
             try:
@@ -110,15 +115,21 @@ def process_message():
             category=extracted.get('category'),
             name=extracted.get('name') or 'unknown',
             quantity=quantity,
-            location_geojson=location_geojson,   # <-- SAME for all
+            location_geojson=extracted.get("location_geojson") or location_geojson,
             phone_number=phone,
             first_name=first_name,
             last_name=last_name,
             social_security_number=ssn,
             source_text=text,
             user_type=user_type,
-            created_at=datetime.utcnow()
+            created_at=datetime.utcnow(),
+            flagged=extracted.get('flagged', False),
+            abuse_reason=extracted.get('abuse_reason'),
         )
+
+        if extracted.get("distance_km") is not None:
+            resource.distance_km = extracted["distance_km"]
+
         db.session.add(resource)
         resources_created.append(resource)
 
@@ -133,6 +144,9 @@ def process_message():
                 "name": r.name,
                 "quantity": r.quantity,
                 "location": r.location_geojson,
+                "distance_km": getattr(r, "distance_km", None),
+                "flagged": r.flagged,
+                "abuse_reason": r.abuse_reason,
                 "phone_number": r.phone_number,
                 "created_at": r.created_at.isoformat() + 'Z',
                 "first_name": r.first_name,
@@ -144,18 +158,27 @@ def process_message():
         ]
     }), 201
 
+
+
 @api_bp.get('/resources/')
 def list_resources():
     situation = request.args.get('situation')
+    location_json = request.args.get('incident_location_geojson')
 
-    # --- If a situation is provided, use the LLM + geocoding matcher ---
     if situation:
         from services.resource_matcher import match_resources_to_situation
-        matched = match_resources_to_situation(situation)
+        try:
+            incident_location = json.loads(location_json) if location_json else None
+        except Exception:
+            incident_location = None
+
+        matched = match_resources_to_situation(situation, incident_location)
         return jsonify({
             "situation": situation,
+            "incident_location": incident_location,
             "resources": matched
         })
+
 
     # --- Otherwise: list all resources normally ---
     resources = Resource.query.all()
@@ -174,6 +197,89 @@ def list_resources():
             } for r in resources
         ]
     })
+
+
+@api_bp.post("/resources/create/")
+def create_resource():
+    """
+    Manually create a new Resource entry.
+
+    Example JSON body:
+    {
+        "category": "medical",
+        "name": "first aid kit",
+        "quantity": 12,
+        "location_text": "Tampere central hospital",
+        "location_geojson": {
+            "type": "Point",
+            "coordinates": [23.7610, 61.4981]
+        },
+        "phone_number": "+358401234567",
+        "first_name": "Liisa",
+        "last_name": "Virtanen",
+        "social_security_number": "123456-789A",
+        "user_type": "GOVERNMENT_AGENCY",
+        "source_text": "manual entry"
+    }
+    """
+    data = request.get_json(silent=True) or {}
+
+    # Basic validation
+    if not data.get("name"):
+        return jsonify({"ok": False, "error": "Field 'name' is required."}), 400
+
+    # Handle optional fields safely
+    try:
+        quantity = int(data["quantity"]) if data.get("quantity") is not None else None
+    except ValueError:
+        return jsonify({"ok": False, "error": "Invalid 'quantity' (must be integer)."}), 400
+
+    # Parse user_type enum if provided
+    user_type = None
+    if data.get("user_type"):
+        from models import UserType
+        try:
+            user_type = UserType[data["user_type"].upper()]
+        except KeyError:
+            return jsonify({"ok": False, "error": f"Invalid user_type '{data['user_type']}'."}), 400
+
+    # Build resource instance
+    resource = Resource(
+        category=data.get("category"),
+        name=data.get("name"),
+        quantity=quantity,
+        location_geojson=data.get("location_geojson"),
+        location_text=data.get("location_text"),
+        distance_km=data.get("distance_km"),
+        phone_number=data.get("phone_number"),
+        first_name=data.get("first_name"),
+        last_name=data.get("last_name"),
+        social_security_number=data.get("social_security_number"),
+        source_text=data.get("source_text") or "manual entry",
+        user_type=user_type,
+        flagged=False,
+        abuse_reason=None,
+    )
+
+    db.session.add(resource)
+    db.session.commit()
+
+    return jsonify({
+        "ok": True,
+        "message": "Resource created successfully.",
+        "resource": {
+            "id": resource.id,
+            "category": resource.category,
+            "name": resource.name,
+            "quantity": resource.quantity,
+            "location": resource.location_geojson,
+            "phone_number": resource.phone_number,
+            "first_name": resource.first_name,
+            "last_name": resource.last_name,
+            "user_type": resource.user_type.value if resource.user_type else None,
+            "created_at": resource.created_at.isoformat() + "Z"
+        }
+    }), 201
 
 @api_bp.patch('/resources/<int:resource_id>/')
 def update_resource(resource_id):
@@ -215,3 +321,60 @@ def update_resource(resource_id):
         }
     })
 
+@api_bp.post("/verify-legal-entity/request/")
+def request_verification():
+    data = request.get_json(silent=True) or {}
+    email = (data.get("email") or "").strip().lower()
+    user_type = (data.get("user_type") or "").strip().upper()
+
+    if not email or not user_type:
+        return jsonify({"ok": False, "error": "Email and user_type are required."}), 400
+
+    result = verify_legal_entity(email, user_type)
+    if not result["ok"]:
+        return jsonify({
+            "ok": False,
+            "verified": False,
+            "reason": result["reason"],
+            "domain": result["domain"]
+        }), 403
+
+    # Store if not already in DB
+    record = VerifiedEmail.query.filter_by(email=email).first()
+    if not record:
+        db.session.add(VerifiedEmail(email=email, user_type=user_type))
+        db.session.commit()
+
+    return jsonify({
+        "ok": True,
+        "message": "Verification code (mock) created.",
+        "email": email,
+        "domain": result["domain"],
+        "user_type": user_type,
+        "reason": result["reason"],
+    }), 200
+
+
+@api_bp.post("/verify-legal-entity/confirm/")
+def confirm_verification():
+    data = request.get_json(silent=True) or {}
+    email = (data.get("email") or "").strip().lower()
+    code = (data.get("code") or "").strip()
+
+    if not email or not code:
+        return jsonify({"ok": False, "error": "Email and code are required."}), 400
+
+    record = VerifiedEmail.query.filter_by(email=email).first()
+    if not record:
+        return jsonify({"ok": False, "error": "Email not found."}), 404
+
+    if code != "123456":
+        return jsonify({"ok": False, "error": "Invalid code."}), 400
+
+    return jsonify({
+        "ok": True,
+        "verified": True,
+        "email": email,
+        "user_type": record.user_type,
+        "message": "Verification successful."
+    }), 200
