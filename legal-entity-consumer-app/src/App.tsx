@@ -668,7 +668,7 @@ function App() {
   if (appState === 'success') {
     return (
       <div className="container">
-        <h1>🎉 Resource Created Successfully!</h1>
+        <h1>Resource Created Successfully!</h1>
         <div className="form-container">
           <p>Your resource has been successfully added to the system.</p>
           <button onClick={() => setAppState('resource-form')}>

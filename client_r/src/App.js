@@ -25,6 +25,7 @@ const NORDIC_BOUNDS = [
 // Helper function to get category icon
 const getCategoryIcon = (category) => {
   const icons = {
+    'ALL': '🌍',
     'SKILLS': '👥',
     'FUEL': '⛽',
     'FOOD': '🍽️',
@@ -49,11 +50,13 @@ function App() {
   const [center, setCenter] = useState(INITIAL_CENTER)
   const [zoom, setZoom] = useState(INITIAL_ZOOM)
   const [resources, setResources] = useState([])
+  const [allResources, setAllResources] = useState([]) // Store all resources for filtering
   const [flaggedResources, setFlaggedResources] = useState([])
   const [showFlaggedTable, setShowFlaggedTable] = useState(false)
   const [loading, setLoading] = useState(true)
   const [mapLoaded, setMapLoaded] = useState(false)
   const [error, setError] = useState(null)
+  const [selectedCategory, setSelectedCategory] = useState('ALL') // Filter state
   
   // Emergency location
   const emergencyLocation = {
@@ -73,7 +76,8 @@ function App() {
         const flagged = allResources.filter(resource => resource.flagged === true)
         const nonFlagged = allResources.filter(resource => resource.flagged !== true)
         
-        setResources(nonFlagged)
+        setAllResources(nonFlagged) // Store all non-flagged resources
+        setResources(nonFlagged) // Initially show all resources
         setFlaggedResources(flagged)
         setError(null)
       } catch (err) {
@@ -276,6 +280,23 @@ function App() {
     setShowFlaggedTable(false)
   }
 
+  // Filter resources by category
+  const handleCategoryFilter = (category) => {
+    setSelectedCategory(category)
+    if (category === 'ALL') {
+      setResources(allResources)
+    } else {
+      const filteredResources = allResources.filter(resource => resource.category === category)
+      setResources(filteredResources)
+    }
+  }
+
+  // Get unique categories from all resources
+  const getUniqueCategories = () => {
+    const categories = [...new Set(allResources.map(resource => resource.category))]
+    return categories.sort()
+  }
+
   if (loading) {
     return (
       <div className="loading">
@@ -310,6 +331,32 @@ function App() {
         </div>
       </div>
       
+      <div className="category-filters">
+        <div className="category-filters-header">
+          <h4>Filter by Category</h4>
+        </div>
+        <div className="category-buttons">
+          <button 
+            className={`category-button ${selectedCategory === 'ALL' ? 'active' : ''}`}
+            onClick={() => handleCategoryFilter('ALL')}
+          >
+            {getCategoryIcon('ALL')} All ({allResources.length})
+          </button>
+          {getUniqueCategories().map(category => {
+            const count = allResources.filter(r => r.category === category).length
+            return (
+              <button
+                key={category}
+                className={`category-button ${selectedCategory === category ? 'active' : ''}`}
+                onClick={() => handleCategoryFilter(category)}
+              >
+                {getCategoryIcon(category)} {category} ({count})
+              </button>
+            )
+          })}
+        </div>
+      </div>
+      
       <button className='reset-button' onClick={handleResetClick}>
         Reset View
       </button>
@@ -334,7 +381,6 @@ function App() {
                     <th>Category</th>
                     <th>Name</th>
                     <th>Quantity</th>
-                    <th>Type</th>
                     <th>Phone</th>
                     <th>Reason</th>
                     <th>Created</th>
@@ -346,7 +392,6 @@ function App() {
                       <td>{resource.category}</td>
                       <td>{resource.name}</td>
                       <td>{resource.quantity || 'N/A'}</td>
-                      <td>{resource.user_type || 'N/A'}</td>
                       <td>{resource.phone_number || 'N/A'}</td>
                       <td>{resource.abuse_reason || 'N/A'}</td>
                       <td>{new Date(resource.created_at).toLocaleDateString()}</td>
