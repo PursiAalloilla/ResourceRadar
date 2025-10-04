@@ -15,21 +15,12 @@ services:
     build: client_r
     restart: unless-stopped
     volumes:
-      - ./client:/app
+      - ./client_r:/app
     ports:
       - 3000:3000
     depends_on:
       - server
   
-  e2e-tests:
-    entrypoint: "/bin/true"
-    build: e2e-tests
-    network_mode: host
-    depends_on:
-      - client
-    volumes:
-      - ./e2e-tests/tests:/app/tests
-
   database:
     container_name: postgresql_database
     image: postgres:17.0
