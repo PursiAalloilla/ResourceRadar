@@ -19,9 +19,8 @@ Emergency map:
 
 https://emergency-map-app-9eb97d3eafb4.herokuapp.com/ 
 
-In case you want to run the application locally you need an containerization tool like docker compose or podman. 
 
-## Running the App with Docker Compose
+## Running the App with Docker Compose (running local)
 
 1. Make sure you have [Docker](https://docs.docker.com/get-docker/) and [Docker Compose](https://docs.docker.com/compose/install/) installed.
 
